@@ -1,0 +1,167 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Toolbar */
+.toolbar {
+  background: #f5f5f5;
+  padding: 12px 16px;
+  border-bottom: 1px solid #ddd;
+}
+
+.toolbar .title {
+  font-size: 20px;
+  font-weight: bold;
+  margin-right: 20px;
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.input-group.narrow {
+  width: 80px;
+}
+
+.input-group input {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.input-group input[readonly] {
+  background: #f9f9f9;
+  width: 250px;
+}
+
+.input-group.narrow input {
+  width: 50px;
+}
+
+.input-group label {
+  font-size: 12px;
+  color: #666;
+}
+
+button {
+  padding: 6px 14px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+button:hover {
+  background: #f0f0f0;
+}
+
+button:active {
+  background: #e0e0e0;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* Main Content */
+.main-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.canvas-area {
+  flex: 3;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid #ddd;
+}
+
+.canvas-scroll {
+  height: 120px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #f5f5f5;
+  padding: 10px;
+}
+
+#jianpu-canvas {
+  background: #fff;
+  border-radius: 5px;
+  cursor: pointer;
+  height: 100px;
+  display: block;
+}
+
+/* Right Panel */
+.right-panel {
+  flex: 1;
+  min-width: 180px;
+  max-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  background: #fafafa;
+}
+
+.panel {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.shortcuts-panel .shortcut-item {
+  font-size: 12px;
+  color: #444;
+  margin-bottom: 4px;
+}
+
+.info-panel #selected-info {
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+/* Status Bar */
+.status-bar {
+  background: #f0f0f0;
+  padding: 6px 16px;
+  font-size: 12px;
+  color: #666;
+  border-top: 1px solid #ddd;
+}
