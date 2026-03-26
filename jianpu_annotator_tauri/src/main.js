@@ -280,6 +280,7 @@ async function onExport() {
 // Auto-ban: mark the first note of each measure as ban
 function onAutoBan() {
   const beatsPerMeasure = parseInt(elements.beatsPerMeasure.value, 10) || 4;
+  console.log('[AutoBan] 开始自动标注板', { beatsPerMeasure, viewMode: state.viewMode });
 
   if (state.viewMode === 'all' && state.allProjects.length > 0) {
     // Apply to all rows
@@ -288,31 +289,47 @@ function onAutoBan() {
       let cumulativeBeats = 0;
       let measureStartIdx = 0;
 
+      // 先把每一行的第一个音标注为 ban
+      if (project.notes.length > 0 && !project.notes[0].ban) {
+        project.notes[0].ban = 1;
+        totalMarked++;
+        console.log(`[AutoBan] all模式 project 第一音 idx=0 标注ban=1`);
+      }
+
       for (let idx = 0; idx < project.notes.length; idx++) {
         const note = project.notes[idx];
 
         // Get note beats from renderer
         const { beats, isN } = renderer.getNoteInfo(note);
+        console.log(`[AutoBan] all模式 project[0] idx=${idx} note.value=${note.value} beats=${beats} isN=${isN} cumulativeBeats=${cumulativeBeats.toFixed(2)}`, { note });
 
         if (isN && idx > 0) {
           const prevInfo = renderer.getNoteInfo(project.notes[idx - 1]);
           cumulativeBeats += prevInfo.beats * 0.5;
+          console.log(`[AutoBan] all模式 idx=${idx} 是N符，加前音符 ${prevInfo.beats}*0.5=${prevInfo.beats * 0.5} 到 cumulativeBeats`);
         } else {
           cumulativeBeats += beats;
         }
 
         // Check if we completed a measure
         if (cumulativeBeats >= beatsPerMeasure && idx > 0) {
-          // Mark the first note of the new measure
-          if (!project.notes[measureStartIdx].ban) {
-            project.notes[measureStartIdx].ban = 1;
+          console.log(`[AutoBan] all模式 idx=${idx} 触发小节边界! cumulativeBeats=${cumulativeBeats.toFixed(2)} >= beatsPerMeasure=${beatsPerMeasure}`);
+          // 标注的是 idx+1（下一音），因为 idx 是当前小节的最后一个音
+          const nextIdx = idx + 1;
+          if (nextIdx < project.notes.length && !project.notes[nextIdx].ban) {
+            project.notes[nextIdx].ban = 1;
             totalMarked++;
+            console.log(`[AutoBan] all模式 idx=${idx} 标注ban=1 at nextIdx=${nextIdx} note.value=${project.notes[nextIdx].value}`);
+          } else if (nextIdx < project.notes.length) {
+            console.log(`[AutoBan] all模式 idx=${idx} nextIdx=${nextIdx} 已有ban，跳过`);
           }
-          measureStartIdx = idx;
+          measureStartIdx = nextIdx + 1;  // 下一小节的起始位置是 nextIdx+1
           cumulativeBeats = cumulativeBeats % beatsPerMeasure;
+          console.log(`[AutoBan] all模式 idx=${idx} 更新 measureStartIdx=${measureStartIdx} remainder cumulativeBeats=${cumulativeBeats.toFixed(2)}`);
         }
       }
     });
+    console.log(`[AutoBan] all模式完成，共标注 ${totalMarked} 个小节`);
     setStatus(`自动标注板完成，共标注 ${totalMarked} 个小节起始音`);
   } else if (state.project) {
     // Apply to single row
@@ -320,29 +337,48 @@ function onAutoBan() {
     let measureStartIdx = 0;
     let totalMarked = 0;
 
+    console.log(`[AutoBan] 单行模式开始，notes.length=${state.project.notes.length}`);
+
+    // 先把第一个音标注为 ban
+    if (state.project.notes.length > 0 && !state.project.notes[0].ban) {
+      state.project.notes[0].ban = 1;
+      totalMarked++;
+      console.log(`[AutoBan] 单行模式 第一音 idx=0 标注ban=1`);
+    }
+
     for (let idx = 0; idx < state.project.notes.length; idx++) {
       const note = state.project.notes[idx];
 
       const { beats, isN } = renderer.getNoteInfo(note);
+      console.log(`[AutoBan] 单行模式 idx=${idx} note.value=${note.value} beats=${beats} isN=${isN} cumulativeBeats=${cumulativeBeats.toFixed(2)}`, { note });
 
       if (isN && idx > 0) {
         const prevInfo = renderer.getNoteInfo(state.project.notes[idx - 1]);
         cumulativeBeats += prevInfo.beats * 0.5;
+        console.log(`[AutoBan] 单行模式 idx=${idx} 是N符，加前音符 ${prevInfo.beats}*0.5=${prevInfo.beats * 0.5}`);
       } else {
         cumulativeBeats += beats;
       }
 
       // Check if we completed a measure
       if (cumulativeBeats >= beatsPerMeasure && idx > 0) {
-        if (!state.project.notes[measureStartIdx].ban) {
-          state.project.notes[measureStartIdx].ban = 1;
+        console.log(`[AutoBan] 单行模式 idx=${idx} 触发小节边界! cumulativeBeats=${cumulativeBeats.toFixed(2)} >= beatsPerMeasure=${beatsPerMeasure}`);
+        // 标注的是 idx+1（下一音），因为 idx 是当前小节的最后一个音
+        const nextIdx = idx + 1;
+        if (nextIdx < state.project.notes.length && !state.project.notes[nextIdx].ban) {
+          state.project.notes[nextIdx].ban = 1;
           totalMarked++;
+          console.log(`[AutoBan] 单行模式 idx=${idx} 标注ban=1 at nextIdx=${nextIdx} note.value=${state.project.notes[nextIdx].value}`);
+        } else if (nextIdx < state.project.notes.length) {
+          console.log(`[AutoBan] 单行模式 idx=${idx} nextIdx=${nextIdx} 已有ban，跳过`);
         }
-        measureStartIdx = idx;
+        measureStartIdx = nextIdx + 1;  // 下一小节的起始位置是 nextIdx+1
         cumulativeBeats = cumulativeBeats % beatsPerMeasure;
+        console.log(`[AutoBan] 单行模式 idx=${idx} 更新 measureStartIdx=${measureStartIdx} remainder cumulativeBeats=${cumulativeBeats.toFixed(2)}`);
       }
     }
     setStatus(`自动标注板完成，共标注 ${totalMarked} 个小节起始音`);
+    console.log(`[AutoBan] 单行模式完成，共标注 ${totalMarked} 个小节`);
   } else {
     setStatus('请先加载简谱数据');
     return;
