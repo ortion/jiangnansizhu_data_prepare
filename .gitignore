@@ -1,1 +1,5 @@
 jianpu_annotator_tauri/node_modules
+jianpu_annotator_tauri/dist
+jianpu_annotator_tauri/src-tauri/target
+.DS_Store
+*/.DS_Store
