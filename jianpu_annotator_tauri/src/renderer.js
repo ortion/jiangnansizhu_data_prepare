@@ -30,13 +30,11 @@ class JianpuRenderer {
     this.ctx = canvas.getContext("2d");
     this.beatsPerMeasure = 4;
     this.zoomScale = 1.0;
-    this.noteXPositions = []; // 保存音符位置
-    this.noteWidths = []; // 每个音符实际宽度
+    this.noteXPositions = [];
+    this.noteWidths = [];
+    this._lastBeatLines = 0; // ✅ 1. 加这里
   }
 
-  /**
-   * Resize canvas based on number of notes
-   */
   resize(noteCount, rowCount = 1) {
     const cellHeight = CELL_HEIGHT * this.zoomScale;
     const width = Math.max(noteCount * CELL_WIDTH * this.zoomScale * 1.5, 800);
@@ -45,51 +43,33 @@ class JianpuRenderer {
     this.canvas.height = height;
   }
 
-  /**
-   * Set zoom level
-   */
   setZoom(scale) {
     this.zoomScale = scale;
   }
 
-  /**
-   * Clear the canvas
-   */
   clear() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  /**
-   * Calculate beats for a single note
-   * Returns { beats, extendsHalf }
-   */
   getNoteInfo(note) {
     const parsed = parseNoteValue(note.value);
-    let beats = 1; // default
+
+    let beats = 1;
 
     if (parsed.prefix.includes("z")) beats = 0.5;
     else if (parsed.prefix.includes("x")) beats = 0.25;
     else if (parsed.prefix.includes("c")) beats = 0.125;
-
     if (parsed.suffix === ":") beats = 2;
-    const isN = parsed.prefix.includes("N");
-    if (isN) {
+    if (parsed.isN) {
       beats = beats * 1.5;
     }
-
-    return { beats, isN };
+    return { beats, isN: parsed.isN, isB: parsed.isLowOctave };
   }
 
-  /**
-   * Draw all notes (single row mode)
-   */
   draw(notes, selectedIdx, scrollX) {
     this.drawMultipleRows([notes], selectedIdx, 0, scrollX);
   }
 
-  /**
-   * Draw multiple rows (all mode)
-   */
   drawMultipleRows(allRows, selectedIdx, selectedRow, scrollX) {
     this.clear();
 
@@ -101,81 +81,75 @@ class JianpuRenderer {
       const notes = allRows[row];
       const rowY = row * scaledCellHeight;
 
-      // 1. 计算节拍信息
       const noteBeatsInfo = [];
-      let cumulativeBeats = 0;
-
-      for (let idx = 0; idx < notes.length; idx++) {
-        const note = notes[idx];
-        const noteInfo = this.getNoteInfo(note);
-        let beatValue = noteInfo.beats;
-
-        if (noteInfo.isN && idx > 0) {
-          const prevBeatValue = noteBeatsInfo[idx - 1].beatValue;
-          beatValue = prevBeatValue * 0.5;
-        }
-
-        noteBeatsInfo.push({
-          note: note,
-          beatValue,
-          cumulativeStart: cumulativeBeats,
-          cumulativeEnd: cumulativeBeats + beatValue,
-        });
-        cumulativeBeats += beatValue;
-      }
-
-      // 2. 计算每个音符宽度 + 位置（核心修改）
       this.noteXPositions = [];
       this.noteWidths = [];
+
+      let cumulativeBeats = 0;
+      let lastValidBeatValue = 0;
       let currentX = 0;
       let lastBeatFloor = -1;
 
       for (let idx = 0; idx < notes.length; idx++) {
-        const info = noteBeatsInfo[idx];
         const note = notes[idx];
         const parsed = parseNoteValue(note.value);
 
-        // 新拍间距
+        if (!parsed.isLowOctave) {
+          this._lastBeatLines = parsed.beatLines;
+        }
+
+        const noteInfo = this.getNoteInfo(note);
+        let beatValue = noteInfo.beats;
+
+        if (noteInfo.isB) {
+          if (lastValidBeatValue !== 0) {
+            beatValue = lastValidBeatValue;
+          }
+        } else {
+          lastValidBeatValue = beatValue;
+        }
+
+        const info = {
+          note: note,
+          beatValue,
+          cumulativeStart: cumulativeBeats,
+          cumulativeEnd: cumulativeBeats + beatValue,
+        };
+        noteBeatsInfo.push(info);
+
         const currentBeatFloor = Math.floor(info.cumulativeStart);
         if (currentBeatFloor !== lastBeatFloor) {
           currentX += scaledBeatGap;
           lastBeatFloor = currentBeatFloor;
         }
-
-        // 核心：二分音符占 1个CELL，四分音符也占1个CELL
-        const width = scaledCellWidth;
+        const width = parsed.suffix === ":" ? scaledCellWidth * 2 : scaledCellWidth;
         this.noteWidths.push(width);
         this.noteXPositions.push(currentX);
         currentX += width;
-      }
 
-      // 3. 绘制音符
-      for (let idx = 0; idx < notes.length; idx++) {
+        cumulativeBeats += beatValue;
+
         const x = this.noteXPositions[idx] - scrollX;
         const w = this.noteWidths[idx];
         if (x + w < 0 || x > this.canvas.width) continue;
 
         const isSelected = row === selectedRow && idx === selectedIdx;
-        this.drawNote(notes[idx], x, rowY, w, isSelected);
+        this.drawNote(note, x, rowY, w, isSelected);
       }
 
-      // 4. 小节线
       const totalBeats = cumulativeBeats;
       const measureCount = Math.floor(totalBeats / this.beatsPerMeasure);
-
       for (let measure = 1; measure <= measureCount; measure++) {
         const measureBeats = measure * this.beatsPerMeasure;
         let sumBeats = 0;
-
         for (let idx = 0; idx < noteBeatsInfo.length; idx++) {
           const info = noteBeatsInfo[idx];
           const nextSum = sumBeats + info.beatValue;
-
           if (measureBeats > sumBeats && measureBeats <= nextSum) {
             const ratio = (measureBeats - sumBeats) / info.beatValue;
             const mx =
               this.noteXPositions[idx] + ratio * this.noteWidths[idx] - scrollX;
-            this.drawMeasureLine(mx, rowY, scaledCellHeight);
+            this.drawMeasureLine(mx + scaledBeatGap / 2, rowY, scaledCellHeight);
             break;
           }
           sumBeats = nextSum;
@@ -193,12 +167,16 @@ class JianpuRenderer {
     this.ctx.stroke();
   }
 
-  // 绘制音符（支持动态宽度）
   drawNote(note, x, rowY, width, selected) {
     const parsed = parseNoteValue(note.value);
+
+    if (parsed.isLowOctave) {
+      parsed.beatLines = this._lastBeatLines;
+    }
+
     const s = this.zoomScale;
     const scaledNoteSize = NOTE_SIZE * s;
-    const scaledDotSize = DOT_SIZE * s;
+    const scaledDotSize = DOT_SIZE ;
 
     const cx = x + width / 2;
     const cy = rowY + (CELL_HEIGHT * s) / 2;
@@ -213,7 +191,7 @@ class JianpuRenderer {
       );
     }
 
-    if (parsed.isHighOctave) this.drawDot(cx, cy - 24 * s, scaledDotSize);
+    if (parsed.isHighOctave) this.drawDot(cx, cy - 18 * s, scaledDotSize* 0.7);
     this.drawNoteNumber(
       parsed.note || "?",
       cx,
@@ -221,11 +199,11 @@ class JianpuRenderer {
       this.getNoteColor(note),
       scaledNoteSize,
     );
-    if (parsed.isLowOctave) this.drawDot(cx, cy + 24 * s, scaledDotSize);
+    if (parsed.isLowOctave) this.drawDot(cx, cy + 18 * s, scaledDotSize* 0.7);
     if (parsed.beatLines > 0)
-      this.drawBeatLines(cx, cy + 32 * s, parsed.beatLines, s);
+      this.drawBeatLines(cx, cy + 25 * s, parsed.beatLines, s);
     if (parsed.isN)
-      this.drawNDot(cx + 15 * s, cy + 10 * s, scaledDotSize * 0.7);
+      this.drawNDot(cx + 10, cy + 10 * s, scaledDotSize * 0.7);
     if (parsed.suffix === ":") this.drawSuffix("-", cx + 13 * s, cy, 16 * s);
   }
 
@@ -275,7 +253,6 @@ class JianpuRenderer {
     this.ctx.fillText(suffix, x, y);
   }
 
-  // 精准点击
   hitTest(x, scrollX) {
     const worldX = x + scrollX;
     for (let i = 0; i < this.noteXPositions.length; i++) {
